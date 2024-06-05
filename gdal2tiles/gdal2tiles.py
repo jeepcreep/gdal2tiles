@@ -1083,7 +1083,10 @@ def create_overview_tiles(tile_job_info, output_folder, options):
 
     for tz in range(tile_job_info.tmaxz - 1, tile_job_info.tminz - 1, -1):
         tminx, tminy, tmaxx, tmaxy = tile_job_info.tminmax[tz]
-        for ty in range(tmaxy, tminy - 1, -1):
+        yrange = range(tmaxy, tminy - 1, -1)
+        if options.leaflet:
+            yrange = range(tminy, tmaxy + 1)
+        for ty in yrange:
             for tx in range(tminx, tmaxx + 1):
 
                 ti += 1
@@ -1126,10 +1129,18 @@ def create_overview_tiles(tile_job_info, output_folder, options):
                                 os.path.join(output_folder, str(tz + 1), str(x),
                                              "%s.%s" % (y, tile_job_info.tile_extension)),
                                 gdal.GA_ReadOnly)
-                            if (ty == 0 and y == 1) or (ty != 0 and (y % (2 * ty)) != 0):
-                                tileposy = 0
+                            if options.leaflet:
+                                if ty:
+                                    tileposy = y % (2 * ty)
+                                elif ty == 0 and y == 1:
+                                    tileposy = tile_job_info.tile_size
+                                else:
+                                    tileposy = 0
                             else:
-                                tileposy = tile_job_info.tile_size
+                                if (ty == 0 and y == 1) or (ty != 0 and (y % (2 * ty)) != 0):
+                                    tileposy = 0
+                                else:
+                                    tileposy = tile_job_info.tile_size
                             if tx:
                                 tileposx = x % (2 * tx) * tile_job_info.tile_size
                             elif tx == 0 and x == 1:
@@ -1776,7 +1787,11 @@ class GDAL2Tiles(object):
         tile_details = []
 
         tz = self.tmaxz
-        for ty in range(tmaxy, tminy - 1, -1):
+        yrange = range(tmaxy, tminy - 1, -1)
+        if self.options.leaflet:
+            yrange = range(tminy, tmaxy + 1)
+
+        for ty in yrange:
             for tx in range(tminx, tmaxx + 1):
 
                 ti += 1
@@ -1837,13 +1852,17 @@ class GDAL2Tiles(object):
                         rysize = ysize % tsize
                     if rysize == 0:
                         rysize = tsize
-                    ry = ysize - (ty * tsize) - rysize
+                    if self.options.leaflet:
+                        ry = ty * tsize
+                    else:
+                        ry = ysize - (ty * tsize) - rysize
 
                     wx, wy = 0, 0
                     wxsize = int(rxsize / float(tsize) * self.tilesize)
                     wysize = int(rysize / float(tsize) * self.tilesize)
-                    if wysize != self.tilesize:
-                        wy = self.tilesize - wysize
+                    if not self.options.leaflet:
+                        if wysize != self.tilesize:
+                            wy = self.tilesize - wysize
 
                 # Read the source raster if anything is going inside the tile as per the computed
                 # geo_query
@@ -2415,6 +2434,7 @@ class GDAL2Tiles(object):
         args['tileformat'] = self.tileext
         args['publishurl'] = self.options.url
         args['copyright'] = self.options.copyright
+        args['leaflet'] = self.options.leaflet # Set 0,0 point to north. For use with 'leaflet'. Requires options.profile = raster. 
         if self.options.tmscompatible:
             args['tmsoffset'] = "-1"
         else:
